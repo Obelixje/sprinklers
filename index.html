@@ -67,9 +67,18 @@
     cursor: pointer;
     transition: .15s ease;
   }
-  .zone.clickable:hover {
-    fill: rgba(46, 160, 67, .12);
-    stroke: rgba(46, 160, 67, .55);
+  @media (hover: hover) and (pointer: fine) {
+    .zone.clickable:hover {
+      fill: rgba(46, 160, 67, .12);
+      stroke: rgba(46, 160, 67, .55);
+    }
+  }
+
+  /* Korte tikfeedback voor touchscreens, zonder 'vastzittende' hover */
+  @media (hover: none) and (pointer: coarse) {
+    .zone.clickable:active {
+      opacity: .82;
+    }
   }
   .zone.water {
     fill: rgba(46, 160, 67, .31);
