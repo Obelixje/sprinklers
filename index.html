@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sprinkler tuin interactief</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    background: #f3f5f4;
+    color: #1f2933;
+  }
+  .page {
+    max-width: 1580px;
+    margin: 0 auto;
+    padding: 16px;
+  }
+  h1 { margin: 0 0 6px; font-size: 30px; }
+  .intro {
+    margin: 0 0 16px;
+    color: #667085;
+    line-height: 1.45;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 390px;
+    gap: 16px;
+    align-items: start;
+  }
+  .card {
+    background: #fff;
+    border: 1px solid #dfe5e2;
+    border-radius: 16px;
+    box-shadow: 0 6px 22px rgba(0,0,0,.06);
+  }
+  .map-card { padding: 12px; }
+  .map-wrap {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 3570 / 2647;
+    overflow: hidden;
+    border-radius: 12px;
+    background: #fff;
+  }
+  .map-wrap img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    user-select: none;
+    pointer-events: none;
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+  }
+
+  .zone {
+    fill: rgba(0,0,0,0);
+    stroke: rgba(0,0,0,0);
+    stroke-width: 6;
+    cursor: pointer;
+    transition: .15s ease;
+  }
+  .zone.clickable:hover {
+    fill: rgba(46, 160, 67, .12);
+    stroke: rgba(46, 160, 67, .55);
+  }
+  .zone.water {
+    fill: rgba(46, 160, 67, .31);
+    stroke: rgba(24, 120, 45, .98);
+  }
+  .zone.off {
+    fill: rgba(220, 53, 69, .17);
+    stroke: rgba(190, 45, 57, .82);
+  }
+  .zone.auto {
+    fill: rgba(33, 150, 243, .26);
+    stroke: rgba(30, 110, 200, .95);
+  }
+  .zone.ha-only {
+    cursor: default;
+  }
+  .zone.inactive {
+    fill: rgba(0,0,0,0);
+    stroke: rgba(0,0,0,0);
+    cursor: default;
+  }
+
+  .valve-marker {
+    opacity: 0;
+    transition: .15s ease;
+    pointer-events: none;
+  }
+  .valve-marker .bubble {
+    rx: 14;
+    ry: 14;
+    stroke-width: 3;
+  }
+  .valve-marker .txt {
+    font-size: 34px;
+    font-weight: 700;
+    text-anchor: middle;
+    dominant-baseline: middle;
+    font-family: Arial, Helvetica, sans-serif;
+  }
+  .valve-open { opacity: 1; }
+  .valve-open .bubble {
+    fill: rgba(25, 135, 84, .97);
+    stroke: #0d6b40;
+  }
+  .valve-open .txt { fill: white; }
+  .valve-closed { opacity: 1; }
+  .valve-closed .bubble {
+    fill: rgba(220, 53, 69, .94);
+    stroke: #a71d2a;
+  }
+  .valve-closed .txt { fill: white; }
+
+  .side { padding: 16px; }
+  .side h2 { margin: 0 0 12px; font-size: 21px; }
+  .hint {
+    background: #f7f8fa;
+    border-radius: 12px;
+    padding: 12px;
+    color: #59636d;
+    font-size: 14px;
+    line-height: 1.45;
+    margin-bottom: 14px;
+  }
+  .ha-controls {
+    display: grid;
+    gap: 9px;
+  }
+  .ha-row {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 10px 11px;
+    border: 1px solid #e2e6e4;
+    border-radius: 12px;
+    background: #fafbfa;
+  }
+  .ha-row.active {
+    border-color: #d7b96a;
+    background: #fff8e7;
+  }
+  .ha-name {
+    font-size: 14px;
+    line-height: 1.3;
+    font-weight: 700;
+  }
+  .switch {
+    position: relative;
+    width: 48px;
+    height: 27px;
+    display: inline-block;
+  }
+  .switch input { display: none; }
+  .slider {
+    position: absolute;
+    inset: 0;
+    background: #c9ced2;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: .18s ease;
+  }
+  .slider:before {
+    content: "";
+    position: absolute;
+    width: 21px;
+    height: 21px;
+    left: 3px;
+    top: 3px;
+    background: white;
+    border-radius: 50%;
+    box-shadow: 0 1px 4px rgba(0,0,0,.25);
+    transition: .18s ease;
+  }
+  .switch input:checked + .slider {
+    background: #d39c15;
+  }
+  .switch input:checked + .slider:before {
+    transform: translateX(21px);
+  }
+
+  .section {
+    border-top: 1px solid #e5e7eb;
+    padding-top: 14px;
+    margin-top: 14px;
+  }
+  .section-title {
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .chip {
+    padding: 7px 11px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .chip.water { background: #e9f8ee; color: #176d35; }
+  .chip.auto { background: #e8f2ff; color: #1f66b2; }
+  .chip.ha { background: #fff3d6; color: #946200; }
+  .chip.open { background: #e7f7ec; color: #147a38; }
+  .chip.closed { background: #fdebea; color: #a72a24; }
+  .empty { color: #8a929a; font-size: 14px; }
+  .message {
+    display: none;
+    margin-top: 12px;
+    padding: 10px 11px;
+    border-radius: 10px;
+    background: #fff3cd;
+    color: #725700;
+    font-size: 13px;
+    line-height: 1.4;
+  }
+  button {
+    width: 100%;
+    margin-top: 16px;
+    border: 0;
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 15px;
+    cursor: pointer;
+    background: #e9edf0;
+    color: #222;
+  }
+  .legend {
+    display: grid;
+    gap: 7px;
+    margin-top: 14px;
+    font-size: 13px;
+    color: #59636d;
+  }
+  .legend span::before {
+    content: "";
+    display: inline-block;
+    width: 15px;
+    height: 15px;
+    border-radius: 4px;
+    vertical-align: -3px;
+    margin-right: 7px;
+  }
+  .legend .l1::before { background: rgba(46,160,67,.31); border: 1px solid #18782d; }
+  .legend .l2::before { background: rgba(220,53,69,.17); border: 1px solid #be2d39; }
+  .legend .l3::before { background: rgba(33,150,243,.26); border: 1px solid #1e6ec8; }
+  .legend .l4::before { background: rgba(25,135,84,.97); border: 1px solid #0d6b40; }
+  .legend .l5::before { background: rgba(220,53,69,.94); border: 1px solid #a71d2a; }
+
+  @media (max-width: 1020px) {
+    .layout { grid-template-columns: 1fr; }
+    .side { order: -1; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Sprinkler tuin</h1>
+  <p class="intro">
+    Zet rechts eerst de gewenste <strong>Home Assistant hoofdzone</strong> aan.
+    Alle bijbehorende delen krijgen dan standaard water en alle handmatige kranen staan open.
+    Tik daarna op een vak in de tekening om dat deel handmatig uit te schakelen.
+  </p>
+
+  <div class="layout">
+    <div class="card map-card">
+      <div class="map-wrap">
+        <img alt="Tuinplattegrond" src="tuin.png">
+        <svg class="overlay" viewBox="0 0 3570 2647" preserveAspectRatio="xMidYMid meet">
+
+          <!-- Klikbare vakken van de twee zones met handmatige kranen -->
+          <polygon class="zone inactive" id="z-schutting" data-zone="schutting" data-group="B"
+            points="1690,118 2550,118 2550,220 2220,220 2220,178 1690,178" />
+          <rect class="zone inactive" id="z-olijflindes" data-zone="olijflindes" data-group="B"
+            x="2576" y="124" width="972" height="95" rx="4" />
+          <rect class="zone inactive" id="z-boom" data-zone="boom" data-group="B"
+            x="1696" y="270" width="178" height="185" rx="4" />
+          <rect class="zone inactive" id="z-slaapkamers" data-zone="slaapkamers" data-group="B"
+            x="1880" y="270" width="670" height="185" rx="4" />
+          <rect class="zone inactive" id="z-360" data-zone="zone360" data-group="B"
+            x="2574" y="318" width="145" height="145" rx="4" />
+          <polygon class="zone inactive" id="z-bak" data-zone="bak" data-group="B"
+            points="2708,500 2840,500 2840,680 3158,680 3158,770 2708,770" />
+
+          <!-- Home Assistant-only zone -->
+          <rect class="zone ha-only inactive" id="z-grashondjes" data-zone="grashondjes" data-group="GH"
+            x="3215" y="780" width="185" height="530" rx="4" />
+
+          <!-- Zone Olijf en Bamboe -->
+          <rect class="zone inactive" id="z-bamboe" data-zone="bamboe" data-group="A"
+            x="1058" y="830" width="52" height="1025" rx="3" />
+          <rect class="zone inactive" id="z-varens" data-zone="varens" data-group="A"
+            x="1113" y="830" width="58" height="1025" rx="3" />
+          <rect class="zone ha-only inactive" id="z-achtertuingras" data-zone="achtertuingras" data-group="AG"
+            x="1140" y="1890" width="1425" height="610" rx="4" />
+          <rect class="zone inactive" id="z-achterhoek" data-zone="achterhoek" data-group="A"
+            x="1055" y="2550" width="145" height="85" rx="3" />
+          <rect class="zone inactive" id="z-olijf2" data-zone="olijf2" data-group="A"
+            x="2755" y="2265" width="150" height="62" rx="3" />
+          <rect class="zone inactive" id="z-olijf1" data-zone="olijf1" data-group="A"
+            x="2970" y="2265" width="220" height="62" rx="3" />
+          <polygon class="zone inactive" id="z-achterterras" data-zone="achterterras" data-group="A"
+            points="2745,2512 3190,2512 3190,2284 3280,2284 3280,2578 2745,2578" />
+
+          <!-- Handmatige kraanmarkeringen -->
+          <g id="valve1" class="valve-marker"><rect class="bubble" x="3160" y="2218" width="78" height="48"></rect><text class="txt" x="3199" y="2242">K1</text></g>
+          <g id="valve2" class="valve-marker"><rect class="bubble" x="3076" y="2218" width="78" height="48"></rect><text class="txt" x="3115" y="2242">K2</text></g>
+          <g id="valve3" class="valve-marker"><rect class="bubble" x="2695" y="2270" width="78" height="48"></rect><text class="txt" x="2734" y="2294">K3</text></g>
+          <g id="valve4" class="valve-marker"><rect class="bubble" x="1068" y="1845" width="78" height="48"></rect><text class="txt" x="1107" y="1869">K4</text></g>
+          <g id="valve5" class="valve-marker"><rect class="bubble" x="1112" y="1776" width="78" height="48"></rect><text class="txt" x="1151" y="1800">K5</text></g>
+          <g id="valve6" class="valve-marker"><rect class="bubble" x="1032" y="1776" width="78" height="48"></rect><text class="txt" x="1071" y="1800">K6</text></g>
+          <g id="valve7" class="valve-marker"><rect class="bubble" x="3052" y="122" width="78" height="48"></rect><text class="txt" x="3091" y="146">K7</text></g>
+          <g id="valve8" class="valve-marker"><rect class="bubble" x="2578" y="122" width="78" height="48"></rect><text class="txt" x="2617" y="146">K8</text></g>
+          <g id="valve9" class="valve-marker"><rect class="bubble" x="2704" y="470" width="78" height="48"></rect><text class="txt" x="2743" y="494">K9</text></g>
+          <g id="valve10" class="valve-marker"><rect class="bubble" x="1885" y="250" width="92" height="48"></rect><text class="txt" x="1931" y="274">K10</text></g>
+          <g id="valve11" class="valve-marker"><rect class="bubble" x="1778" y="250" width="92" height="48"></rect><text class="txt" x="1824" y="274">K11</text></g>
+          <g id="valve12" class="valve-marker"><rect class="bubble" x="1682" y="250" width="92" height="48"></rect><text class="txt" x="1728" y="274">K12</text></g>
+        </svg>
+      </div>
+    </div>
+
+    <aside class="card side">
+      <h2>Home Assistant zones</h2>
+      <div class="ha-controls">
+        <div class="ha-row" id="row-zoneGH">
+          <div class="ha-name">Zone gras hondjes</div>
+          <label class="switch"><input type="checkbox" id="ha-zoneGH"><span class="slider"></span></label>
+        </div>
+        <div class="ha-row" id="row-zoneB">
+          <div class="ha-name">Zone Olijflindes, voor en bak kantoor</div>
+          <label class="switch"><input type="checkbox" id="ha-zoneB"><span class="slider"></span></label>
+        </div>
+        <div class="ha-row" id="row-zoneA">
+          <div class="ha-name">Zone Olijf en Bamboe</div>
+          <label class="switch"><input type="checkbox" id="ha-zoneA"><span class="slider"></span></label>
+        </div>
+        <div class="ha-row" id="row-zoneAG">
+          <div class="ha-name">Zone Achtertuin gras</div>
+          <label class="switch"><input type="checkbox" id="ha-zoneAG"><span class="slider"></span></label>
+        </div>
+      </div>
+
+      <div class="hint" style="margin-top:14px">
+        Bij <strong>Zone Olijf en Bamboe</strong> en <strong>Zone Olijflindes, voor en bak kantoor</strong>
+        staan na inschakelen standaard alle handmatige kranen open. Tik in de tekening op een groen vak om het uit te zetten.
+      </div>
+
+      <div id="message" class="message"></div>
+
+      <div class="section">
+        <div class="section-title">Krijgt water</div>
+        <div id="waterList" class="chips"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Automatisch mee</div>
+        <div id="autoList" class="chips"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Handmatige kranen OPEN</div>
+        <div id="openList" class="chips"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title">Handmatige kranen DICHT</div>
+        <div id="closedList" class="chips"></div>
+      </div>
+
+      <button id="resetBtn">Alles uit / reset</button>
+
+      <div class="legend">
+        <span class="l1">Krijgt water</span>
+        <span class="l2">Handmatig uitgeschakeld</span>
+        <span class="l3">Automatisch gekoppeld</span>
+        <span class="l4">Kraan open</span>
+        <span class="l5">Kraan dicht</span>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+const labels = {
+  schutting: "Schutting Joop en Mieke",
+  olijflindes: "Olijflindes",
+  boom: "Boom",
+  slaapkamers: "Slaapkamers",
+  zone360: "360",
+  bak: "Bak kantoor",
+  grashondjes: "Zone gras hondjes",
+  bamboe: "bamboe",
+  varens: "Varens",
+  achtertuingras: "Zone Achtertuin gras",
+  achterhoek: "Achter sprinkler in hoek",
+  olijf2: "Olijf 2",
+  olijf1: "Olijf 1",
+  achterterras: "Achter terras"
+};
+
+const groupA = ["achterterras", "olijf1", "olijf2", "achterhoek", "varens", "bamboe"];
+const groupB = ["olijflindes", "schutting", "slaapkamers", "bak", "boom"];
+const manualOff = new Set();
+let boomLevel = 0; // 0 uit, 1 enkel, 2 dubbel
+
+function haOn(group) {
+  return document.getElementById("ha-" + group).checked;
+}
+
+function showMessage(text) {
+  const el = document.getElementById("message");
+  el.textContent = text;
+  el.style.display = "block";
+  clearTimeout(showMessage.timer);
+  showMessage.timer = setTimeout(() => el.style.display = "none", 3500);
+}
+
+function chipList(targetId, items, cls, emptyText, formatter = null) {
+  const el = document.getElementById(targetId);
+  if (!items.length) {
+    el.innerHTML = `<span class="empty">${emptyText}</span>`;
+    return;
+  }
+  el.innerHTML = items.map(item => {
+    const text = formatter ? formatter(item) : item;
+    return `<span class="chip ${cls}">${text}</span>`;
+  }).join("");
+}
+
+function setGroupDefaults(group) {
+  if (group === "zoneA") {
+    groupA.forEach(z => manualOff.delete(z));
+  }
+  if (group === "zoneB") {
+    groupB.forEach(z => manualOff.delete(z));
+    boomLevel = 2; // alles open = beide boomkranen open
+  }
+}
+
+function clearGroup(group) {
+  if (group === "zoneA") {
+    groupA.forEach(z => manualOff.delete(z));
+  }
+  if (group === "zoneB") {
+    groupB.forEach(z => manualOff.delete(z));
+    boomLevel = 0;
+  }
+}
+
+function compute() {
+  const water = new Set();
+  const auto = new Set();
+  const open = new Set();
+  const relevant = new Set();
+
+  // Home Assistant-only zones
+  if (haOn("zoneGH")) water.add("grashondjes");
+  if (haOn("zoneAG")) water.add("achtertuingras");
+
+  // Zone A: één-op-één kranen
+  if (haOn("zoneA")) {
+    [1,2,3,4,5,6].forEach(v => relevant.add(v));
+
+    const mapA = {
+      achterterras: 1,
+      olijf1: 2,
+      olijf2: 3,
+      achterhoek: 4,
+      varens: 5,
+      bamboe: 6
+    };
+
+    for (const [z, valve] of Object.entries(mapA)) {
+      if (!manualOff.has(z)) {
+        water.add(z);
+        open.add(valve);
+      }
+    }
+  }
+
+  // Zone B
+  if (haOn("zoneB")) {
+    [7,8,9,10,11,12].forEach(v => relevant.add(v));
+
+    const wantOlijflindes = !manualOff.has("olijflindes");
+    const wantSchutting = !manualOff.has("schutting");
+    const wantSlaapkamers = !manualOff.has("slaapkamers");
+    const wantBak = !manualOff.has("bak");
+
+    // Schutting heeft K7 + K8 nodig en daardoor krijgt Olijflindes ook water.
+    if (wantSchutting) {
+      open.add(7); open.add(8);
+      water.add("schutting");
+      water.add("olijflindes");
+      if (!wantOlijflindes) auto.add("olijflindes");
+    } else if (wantOlijflindes) {
+      open.add(7);
+      water.add("olijflindes");
+    }
+
+    // Bak kantoor heeft K9 + K10 nodig.
+    // Daardoor krijgen Slaapkamers én 360 automatisch ook water.
+    if (wantBak) {
+      open.add(9); open.add(10);
+      water.add("bak");
+      water.add("slaapkamers");
+      water.add("zone360");
+      auto.add("zone360");
+      if (!wantSlaapkamers) auto.add("slaapkamers");
+    } else if (wantSlaapkamers) {
+      open.add(10);
+      water.add("slaapkamers");
+    }
+
+    // Boom: K12 = 1x, K11+K12 = 2x
+    if (boomLevel === 1) {
+      open.add(12);
+      water.add("boom");
+    }
+    if (boomLevel === 2) {
+      open.add(11); open.add(12);
+      water.add("boom");
+    }
+  }
+
+  const closed = [...relevant].filter(v => !open.has(v)).sort((a,b) => a-b);
+  const opened = [...open].sort((a,b) => a-b);
+
+  // Hoofdzone switch styling
+  ["zoneGH","zoneB","zoneA","zoneAG"].forEach(g => {
+    document.getElementById("row-" + g).classList.toggle("active", haOn(g));
+  });
+
+  // Zonekleuren / klikbaarheid
+  document.querySelectorAll(".zone").forEach(el => {
+    const z = el.dataset.zone;
+    const group = el.dataset.group;
+    el.classList.remove("water","off","auto","clickable","inactive");
+
+    let activeGroup = false;
+    if (group === "A") activeGroup = haOn("zoneA");
+    if (group === "B") activeGroup = haOn("zoneB");
+    if (group === "GH") activeGroup = haOn("zoneGH");
+    if (group === "AG") activeGroup = haOn("zoneAG");
+
+    if (!activeGroup) {
+      el.classList.add("inactive");
+      return;
+    }
+
+    if (group === "A" || group === "B") el.classList.add("clickable");
+
+    if (auto.has(z)) el.classList.add("auto");
+    else if (water.has(z)) el.classList.add("water");
+    else el.classList.add("off");
+  });
+
+  // 360 is niet zelfstandig klikbaar: het volgt Bak kantoor.
+  document.getElementById("z-360").classList.remove("clickable");
+
+  // Kraanmarkering op tekening
+  for (let i = 1; i <= 12; i++) {
+    const el = document.getElementById(`valve${i}`);
+    el.classList.remove("valve-open", "valve-closed");
+    if (open.has(i)) el.classList.add("valve-open");
+    else if (relevant.has(i)) el.classList.add("valve-closed");
+  }
+
+  const waterItems = [...water].filter(z => z !== "zone360" || !auto.has("zone360"));
+  chipList("waterList", waterItems, "water", "Geen actieve beregening", z => {
+    if (z === "boom") return `Boom (${boomLevel}× water)`;
+    return labels[z];
+  });
+
+  chipList("autoList", [...auto], "auto", "Geen", z => labels[z]);
+  chipList("openList", opened, "open", "Geen handmatige kranen nodig", v => `K${v}`);
+  chipList("closedList", closed, "closed", "Geen", v => `K${v}`);
+}
+
+function toggleManualZone(z) {
+  if (groupA.includes(z)) {
+    if (!haOn("zoneA")) {
+      showMessage("Zet eerst 'Zone Olijf en Bamboe' aan.");
+      return;
+    }
+    if (manualOff.has(z)) manualOff.delete(z);
+    else manualOff.add(z);
+    compute();
+    return;
+  }
+
+  if (groupB.includes(z)) {
+    if (!haOn("zoneB")) {
+      showMessage("Zet eerst 'Zone Olijflindes, voor en bak kantoor' aan.");
+      return;
+    }
+
+    if (z === "boom") {
+      // In actieve hoofdzone: 2x -> 1x -> uit -> 2x
+      if (boomLevel === 2) boomLevel = 1;
+      else if (boomLevel === 1) boomLevel = 0;
+      else boomLevel = 2;
+      compute();
+      return;
+    }
+
+    const turningOff = !manualOff.has(z);
+
+    // Fysieke afhankelijkheden bewaken.
+    if (turningOff && z === "olijflindes") {
+      manualOff.add("olijflindes");
+      manualOff.add("schutting");
+    } else if (!turningOff && z === "schutting") {
+      manualOff.delete("schutting");
+      manualOff.delete("olijflindes");
+    } else if (turningOff && z === "slaapkamers") {
+      manualOff.add("slaapkamers");
+      manualOff.add("bak");
+    } else if (!turningOff && z === "bak") {
+      manualOff.delete("bak");
+      manualOff.delete("slaapkamers");
+    } else {
+      if (manualOff.has(z)) manualOff.delete(z);
+      else manualOff.add(z);
+    }
+
+    compute();
+  }
+}
+
+document.querySelectorAll(".zone").forEach(el => {
+  el.addEventListener("click", () => {
+    const z = el.dataset.zone;
+    if (z === "zone360" || z === "grashondjes" || z === "achtertuingras") return;
+    toggleManualZone(z);
+  });
+});
+
+["zoneGH","zoneB","zoneA","zoneAG"].forEach(group => {
+  document.getElementById("ha-" + group).addEventListener("change", (e) => {
+    if (e.target.checked) setGroupDefaults(group);
+    else clearGroup(group);
+    compute();
+  });
+});
+
+document.getElementById("resetBtn").addEventListener("click", () => {
+  ["zoneGH","zoneB","zoneA","zoneAG"].forEach(group => {
+    document.getElementById("ha-" + group).checked = false;
+  });
+  manualOff.clear();
+  boomLevel = 0;
+  compute();
+});
+
+compute();
+</script>
+</body>
+</html>
